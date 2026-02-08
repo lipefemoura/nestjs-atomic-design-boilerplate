@@ -464,8 +464,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📞 Support
 
-- 📧 **Email:** your-email@example.com
-- 💬 **Discord:** [Join our community](https://discord.gg/your-invite)
+- 📧 **Email:** danilovinicius1790@gmail.com
+- 💬 **Discord:** [Join our community](https://discord.gg/gSHUVHXNwP)
 - 🐛 **Issues:** [Report bugs](https://github.com/alguemqualquer123/nestjs-atomic-design-boilerplate/issues)
 
 ---
