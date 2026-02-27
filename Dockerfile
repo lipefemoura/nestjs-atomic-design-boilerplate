@@ -1,61 +1,40 @@
 # Multi-stage build for production
-FROM node:18-alpine AS builder
+FROM node:20 AS builder
 
-# Install pnpm
-RUN npm install -g pnpm
-
-# Set working directory
 WORKDIR /app
 
 # Copy package files
 COPY package.json pnpm-lock.yaml ./
 
-# Install dependencies
-RUN pnpm install --frozen-lockfile
+# Install dependencies using npm inside Docker (mais estável)
+RUN npm install
 
-# Copy source code
+# Copy rest of the application
 COPY . .
 
 # Generate Prisma client
-RUN pnpm run prisma:generate
+RUN npx prisma generate
 
-# Build the application
-RUN pnpm run build
+# Build NestJS app
+RUN npm run build
+
 
 # Production stage
-FROM node:18-alpine AS production
+FROM node:20 AS production
 
-# Install pnpm
-RUN npm install -g pnpm
-
-# Create app directory
 WORKDIR /app
 
-# Copy package files
+# Copy only package files
 COPY package.json pnpm-lock.yaml ./
 
 # Install only production dependencies
-RUN pnpm install --frozen-lockfile --prod
+RUN npm install --omit=dev
 
-# Copy built application from builder stage
+# Copy built app
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 
-# Create non-root user
-RUN addgroup -g 1001 -S nodejs
-RUN adduser -S nestjs -u 1001
-
-# Change ownership of the app directory
-RUN chown -R nestjs:nodejs /app
-USER nestjs
-
-# Expose port
 EXPOSE 3000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:3000/ || exit 1
-
-# Start the application
-CMD ["node", "dist/main"]
+CMD ["node", "dist/src/main.js"]

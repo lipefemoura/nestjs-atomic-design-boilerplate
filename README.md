@@ -473,3 +473,260 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ⭐ **If you like this boilerplate, give it a star!** ⭐
 
 🚀 **Happy Coding!** 🚀
+
+
+# Guia de Arquitetura — NestJS Atomic Design Boilerplate
+
+## Visão Geral
+
+Este projeto combina **NestJS** com uma arquitetura inspirada no **Atomic Design**, dividindo o código em camadas com responsabilidades bem definidas. A ideia central é: cada parte do sistema tem um único papel, e as dependências fluem de fora para dentro.
+
+```
+src/
+├── main.ts                  ← Ponto de entrada da aplicação
+├── app.module.ts            ← Módulo raiz (junta tudo)
+│
+├── core/                    ← Camada de lógica de negócio e HTTP
+├── infrastructure/          ← Camada de acesso a dados e serviços externos
+└── shared/                  ← Código reutilizável por todos
+```
+
+---
+
+## As 3 Grandes Camadas
+
+### 1. `core/` — O coração da aplicação
+
+É aqui que vive a lógica principal. É dividido em subcamadas:
+
+#### `core/controllers/` — Recebe requisições HTTP
+Os controllers são a "porta de entrada" da API. Eles recebem o request, chamam o service e retornam a resposta. **Não devem conter lógica de negócio.**
+
+```
+controllers/
+├── app.controller.ts           ← Rota raiz "/"
+├── user.controller.ts          ← Rotas de usuário (base)
+└── v1/                         ← Versionamento de API
+    ├── auth.controller.ts          ← POST /v1/auth/login, /register...
+    ├── users.controller.ts         ← GET /v1/users...
+    └── user-management.controller.ts ← Rotas de admin (ex: banir usuário)
+```
+
+> 💡 **Dica:** A subpasta `v1/` permite que você lance uma `v2/` no futuro sem quebrar os clientes que usam a versão antiga.
+
+#### `core/services/` — Lógica de negócio
+Os services fazem o trabalho pesado. Eles são chamados pelos controllers e chamam os repositories.
+
+```
+services/
+├── app.service.ts      ← Serviços gerais
+├── auth.service.ts     ← Login, geração de JWT, validação de senha
+└── user.service.ts     ← Criação, busca, atualização de usuários
+```
+
+#### `core/modules/` — Organização dos módulos NestJS
+O NestJS usa um sistema de módulos para organizar e injetar dependências.
+
+```
+modules/
+└── v1/
+    ├── auth.module.ts  ← Registra AuthController + AuthService + dependências
+    └── v1.module.ts    ← Módulo que agrupa todos os módulos da v1
+```
+
+#### `core/guards/` — Proteção de rotas
+Guards decidem se uma requisição pode ou não acessar uma rota.
+
+```
+guards/
+├── jwt-auth.guard.ts   ← Verifica se o token JWT é válido
+└── roles.guard.ts      ← Verifica se o usuário tem a role necessária (ex: ADMIN)
+```
+
+#### `core/decorators/` — Anotações personalizadas
+Decorators são "etiquetas" que você coloca em rotas ou parâmetros para adicionar comportamento.
+
+```
+decorators/
+├── current-user.decorator.ts  ← @CurrentUser() → injeta o usuário logado no parâmetro
+├── public.decorator.ts        ← @Public() → marca rota como pública (sem JWT)
+└── roles.decorator.ts         ← @Roles('ADMIN') → define quais roles podem acessar
+```
+
+**Exemplo de uso:**
+```typescript
+@Get('profile')
+@Roles('USER', 'ADMIN')
+getProfile(@CurrentUser() user: User) {
+  return user;
+}
+```
+
+#### `core/filters/` — Tratamento de erros
+```
+filters/
+└── http-exception.filter.ts   ← Captura erros e formata a resposta de erro
+```
+
+#### `core/interceptors/` — Transformação de respostas
+```
+interceptors/
+└── response.interceptor.ts    ← Formata TODA resposta num padrão: { data, statusCode, ... }
+```
+
+#### `core/pipes/` — Validação de dados de entrada
+```
+pipes/
+└── validation.pipe.ts   ← Valida e transforma o body/params usando class-validator
+```
+
+#### `core/config/` — Configurações da aplicação
+```
+config/
+├── env.config.ts        ← Lê e valida variáveis de ambiente (.env)
+└── database.config.ts   ← Configuração da conexão com banco de dados
+```
+
+#### `core/constants/` — Constantes globais
+```
+constants/
+└── errors.ts   ← Mensagens de erro padronizadas (ex: USER_NOT_FOUND)
+```
+
+---
+
+### 2. `infrastructure/` — Acesso a recursos externos
+
+Esta camada isola tudo que depende de serviços externos (banco de dados, cache, filas).
+
+#### `infrastructure/database/` — Banco de dados com Prisma
+```
+database/
+├── prisma.module.ts                   ← Módulo do Prisma (registra o serviço)
+├── prisma.service.ts                  ← Conexão com o banco (estende PrismaClient)
+└── repositories/
+    └── user.repository.ts             ← Queries do banco para a entidade User
+```
+
+> 💡 **Repository Pattern:** Os repositories abstraem as queries do banco. Se você trocar de Prisma para TypeORM, só muda o repository — o service continua igual.
+
+#### `infrastructure/cache/` — Cache com Bull/Redis
+```
+cache/
+└── bull.provider.ts   ← Configuração do Bull (filas com Redis)
+```
+
+#### `infrastructure/queue/` — Filas de processamento
+```
+queue/
+└── redis.provider.ts   ← Configuração da conexão com Redis
+```
+
+---
+
+### 3. `shared/` — Código compartilhado
+
+Código reutilizável que não pertence a nenhuma camada específica.
+
+#### `shared/dto/` — Data Transfer Objects
+DTOs definem o formato dos dados que entram e saem da API.
+
+```
+dto/
+├── auth.dto.ts         ← LoginDto { email, password }, RegisterDto...
+├── pagination.dto.ts   ← PaginationDto { page, limit }
+└── user-role.dto.ts    ← UpdateRoleDto { role }
+```
+
+#### `shared/enums/` — Enumerações
+```
+enums/
+└── user-role.enum.ts   ← enum UserRole { ADMIN = 'ADMIN', USER = 'USER' }
+```
+
+#### `shared/interfaces/` — Contratos TypeScript
+```
+interfaces/
+└── user.interface.ts   ← interface IUser { id, email, role... }
+```
+
+#### `shared/logger/` — Sistema de logs
+```
+logger/
+└── logger.service.ts   ← Logger customizado para toda a aplicação
+```
+
+#### `shared/utils/` — Funções utilitárias
+```
+utils/
+└── date.util.ts   ← Funções de formatação/manipulação de datas
+```
+
+---
+
+## Como as peças se conectam
+
+```
+Request HTTP
+     ↓
+[Guard] jwt-auth.guard → valida o token JWT
+     ↓
+[Guard] roles.guard → valida a permissão
+     ↓
+[Controller] recebe o request, chama o Service
+     ↓
+[Service] executa a lógica de negócio, chama o Repository
+     ↓
+[Repository] faz a query no banco via Prisma
+     ↓
+[Interceptor] response.interceptor formata a resposta
+     ↓
+Response HTTP
+```
+
+---
+
+## Fluxo de um exemplo real: Login
+
+**`POST /v1/auth/login`** com `{ email, password }`
+
+1. **`validation.pipe`** valida que `email` e `password` estão presentes e no formato correto
+2. **`auth.controller.ts`** recebe o `LoginDto` e chama `authService.login(dto)`
+3. **`auth.service.ts`** busca o usuário por email (`userRepository.findByEmail`), compara a senha com bcrypt, gera o JWT
+4. **`user.repository.ts`** faz `prisma.user.findUnique({ where: { email } })`
+5. **`response.interceptor`** envolve o token JWT retornado num padrão `{ data: { token }, statusCode: 200 }`
+6. Se der erro (senha errada), **`http-exception.filter`** captura e retorna `{ error: 'Unauthorized', statusCode: 401 }`
+
+---
+
+## O arquivo `prisma/seed.ts`
+
+Fora do `src/`, existe um arquivo de seed que popula o banco com dados iniciais (usuário admin, etc.) para desenvolvimento.
+
+---
+
+## Resumo Mental
+
+| Pasta | Pergunta que responde |
+|---|---|
+| `core/controllers` | "Qual URL faz o quê?" |
+| `core/services` | "Como a lógica funciona?" |
+| `core/guards` | "Quem pode acessar?" |
+| `core/decorators` | "Como facilitar o código dos controllers?" |
+| `core/filters` | "Como mostrar erros?" |
+| `core/interceptors` | "Como formatar respostas?" |
+| `infrastructure/database` | "Como salvar/buscar dados?" |
+| `infrastructure/cache` | "Como cachear?" |
+| `shared/dto` | "Qual formato de dado entra/sai?" |
+| `shared/enums` | "Quais valores fixos existem?" |
+| `shared/interfaces` | "Qual o tipo TypeScript de cada entidade?" |
+
+---
+
+## Por onde começar?
+
+1. Leia o `src/main.ts` para ver como a app inicia
+2. Leia o `src/app.module.ts` para ver como os módulos se conectam
+3. Escolha uma feature (ex: auth) e siga o caminho: `auth.controller` → `auth.service` → `user.repository`
+4. Para criar uma nova feature, copie o padrão de `users`: crie o controller, service, repository e module correspondentes
+
